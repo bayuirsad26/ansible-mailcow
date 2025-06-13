@@ -1,0 +1,50 @@
+---
+# Backup playbook for manual backup execution
+
+- name: Execute backup for Mailcow infrastructure
+  hosts: mailservers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Check backup configuration
+      ansible.builtin.assert:
+        that:
+          - backup_enabled | bool
+          - backup_destinations is defined
+          - backup_destinations | length > 0
+        fail_msg: "Backup is not properly configured"
+
+    - name: Create backup timestamp
+      ansible.builtin.set_fact:
+        backup_timestamp: "{{ ansible_date_time.epoch }}"
+
+    - name: Execute backup script
+      ansible.builtin.command:
+        cmd: /opt/backup-scripts/mailcow-backup.sh
+      register: backup_result
+      failed_when: backup_result.rc != 0
+
+    - name: Display backup result
+      ansible.builtin.debug:
+        var: backup_result.stdout_lines
+
+    - name: Verify backup integrity
+      ansible.builtin.command:
+        cmd: /opt/backup-scripts/backup-verify.sh
+      register: verify_result
+      when: backup_verify_enabled | bool
+
+    - name: Send backup notification
+      ansible.builtin.mail:
+        to: "{{ vault_backup_notification_email }}"
+        subject: "[{{ environment | upper }}] Manual backup completed"
+        body: |
+          Manual backup completed
+          
+          Server: {{ inventory_hostname }}
+          Time: {{ ansible_date_time.iso8601 }}
+          Status: {{ 'Success' if backup_result.rc == 0 else 'Failed' }}
+          
+          {{ backup_result.stdout }}
+      when: vault_backup_notification_email is defined

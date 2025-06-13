@@ -5,25 +5,52 @@
   "storage-opts": [
     "overlay2.override_kernel_check=true"
   ],
+  {% if docker_userns_remap != "" %}
+  "userns-remap": "{{ docker_userns_remap }}",
+  {% endif %}
   "metrics-addr": "127.0.0.1:9323",
   "experimental": false,
   "features": {
     "buildkit": true
   },
-  "live-restore": true,
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "10GB"
+    }
+  },
+  "live-restore": {{ docker_live_restore | lower }},
   "default-ulimits": {
     "nofile": {
       "Name": "nofile",
       "Hard": 64000,
       "Soft": 64000
+    },
+    "nproc": {
+      "Name": "nproc",
+      "Hard": 32768,
+      "Soft": 32768
     }
   },
   "shutdown-timeout": 30,
-  "userland-proxy": false,
+  "userland-proxy": {{ docker_userland_proxy | lower }},
   "no-new-privileges": true,
   "seccomp-profile": "/etc/docker/seccomp.json",
   "icc": false,
   "disable-legacy-registry": true,
+  "default-address-pools": [
+    {
+      "base": "172.80.0.0/16",
+      "size": 24
+    }
+  ],
   "insecure-registries": [],
-  "registry-mirrors": []
+  "registry-mirrors": [],
+  "dns": ["1.1.1.1", "8.8.8.8"],
+  "dns-opts": ["ndots:0"],
+  "max-concurrent-downloads": 3,
+  "max-concurrent-uploads": 5,
+  "debug": false,
+  "hosts": ["unix:///var/run/docker.sock"],
+  "authorization-plugins": []
 }

@@ -1,0 +1,54 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Backup rotation script for SummitEthic
+
+set -euo pipefail
+
+# Configuration
+BACKUP_PATH="{{ backup_destinations[0].path }}"
+RETENTION_DAYS="{{ backup_retention_days }}"
+LOG_FILE="/var/log/backup-rotation.log"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${LOG_FILE}"
+}
+
+log "Starting backup rotation process"
+
+# Find and remove old backups
+log "Looking for backups older than ${RETENTION_DAYS} days..."
+find "${BACKUP_PATH}" -maxdepth 1 -type d -name "mailcow_backup_*" -mtime +${RETENTION_DAYS} | while read -r old_backup; do
+    log "Removing old backup: ${old_backup}"
+    rm -rf "${old_backup}"
+done
+
+# Calculate disk usage
+DISK_USAGE=$(df -h "${BACKUP_PATH}" | awk 'NR==2 {print $5}')
+log "Backup partition usage: ${DISK_USAGE}"
+
+# Check if disk usage is above threshold
+USAGE_PERCENT=$(echo "${DISK_USAGE}" | sed 's/%//')
+if [ "${USAGE_PERCENT}" -gt 80 ]; then
+    log "WARNING: Disk usage is above 80%. Consider increasing retention or storage."
+    
+    # Remove oldest backup if critical
+    if [ "${USAGE_PERCENT}" -gt 90 ]; then
+        OLDEST_BACKUP=$(find "${BACKUP_PATH}" -maxdepth 1 -type d -name "mailcow_backup_*" -printf '%T@ %p\n' | sort -n | head -1 | cut -d' ' -f2-)
+        if [ -n "${OLDEST_BACKUP}" ]; then
+            log "CRITICAL: Removing oldest backup due to disk space: ${OLDEST_BACKUP}"
+            rm -rf "${OLDEST_BACKUP}"
+        fi
+    fi
+fi
+
+# Count remaining backups
+BACKUP_COUNT=$(find "${BACKUP_PATH}" -maxdepth 1 -type d -name "mailcow_backup_*" | wc -l)
+log "Remaining backups: ${BACKUP_COUNT}"
+
+# Verify minimum backups
+if [ "${BACKUP_COUNT}" -lt 3 ]; then
+    log "WARNING: Less than 3 backups available. Check backup process."
+fi
+
+log "Backup rotation completed"

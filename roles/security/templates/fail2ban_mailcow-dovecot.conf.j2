@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# Fail2ban filter for Mailcow Dovecot
+
+[Definition]
+failregex = ^.*auth: Info: passwd-file\(.*,<HOST>,.*\): Password mismatch.*$
+            ^.*auth: Info: passwd-file\(.*,<HOST>,.*\): unknown user.*$
+            ^.*imap-login: Info: (Aborted login|Disconnected).*rip=<HOST>,.*$
+            ^.*pop3-login: Info: (Aborted login|Disconnected).*rip=<HOST>,.*$
+            ^.*auth failed.*rip=<HOST>.*$
+
+ignoreregex = 

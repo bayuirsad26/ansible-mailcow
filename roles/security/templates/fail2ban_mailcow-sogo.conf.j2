@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+# Fail2ban filter for Mailcow SOGo
+
+[Definition]
+failregex = ^.*SOGo.*authentication failed.*host <HOST>.*$
+            ^.*SOGo.*Login from '<HOST>' for user '.*' might not have worked.*$
+
+ignoreregex = 

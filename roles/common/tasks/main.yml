@@ -2,38 +2,42 @@
 # Common tasks for all servers
 # Implements baseline security and configuration
 
-- name: Update apt cache
+- name: Ensure system is up to date
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
+    upgrade: safe
+  register: apt_update_result
+  retries: 3
+  delay: 10
+  until: apt_update_result is succeeded
   tags: [common, packages]
 
 - name: Install essential packages
   ansible.builtin.apt:
-    name:
-      - apt-transport-https
-      - ca-certificates
-      - curl
-      - gnupg
-      - lsb-release
-      - software-properties-common
-      - python3-pip
-      - python3-setuptools
-      - ufw
-      - fail2ban
-      - unattended-upgrades
-      - htop
-      - vim
-      - git
-      - rsync
-      - net-tools
-      - dnsutils
+    name: "{{ system_packages }}"
     state: present
+  register: apt_install_result
+  retries: 3
+  delay: 10
+  until: apt_install_result is succeeded
   tags: [common, packages]
+
+- name: Install Python packages
+  ansible.builtin.pip:
+    name:
+      - docker
+      - docker-compose
+      - dnspython
+      - passlib
+    state: present
+    executable: pip3
+  tags: [common, python]
 
 - name: Configure system timezone
   community.general.timezone:
     name: "{{ system_timezone }}"
+  notify: restart cron
   tags: [common, timezone]
 
 - name: Configure system locale
@@ -42,16 +46,29 @@
     state: present
   tags: [common, locale]
 
+- name: Set default locale
+  ansible.builtin.copy:
+    content: |
+      LANG={{ system_locale }}
+      LC_ALL={{ system_locale }}
+    dest: /etc/default/locale
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [common, locale]
+
 - name: Set hostname
   ansible.builtin.hostname:
     name: "{{ inventory_hostname }}"
   tags: [common, hostname]
 
 - name: Update /etc/hosts
-  ansible.builtin.lineinfile:
-    path: /etc/hosts
-    line: "{{ ansible_default_ipv4.address }} {{ inventory_hostname }} {{ inventory_hostname_short }}"
-    state: present
+  ansible.builtin.template:
+    src: hosts.j2
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: '0644'
   tags: [common, hostname]
 
 - name: Configure sysctl for security and performance
@@ -59,21 +76,39 @@
     name: "{{ item.key }}"
     value: "{{ item.value }}"
     state: present
+    sysctl_file: /etc/sysctl.d/99-summitethic.conf
     reload: true
-  loop:
-    - { key: "net.ipv4.tcp_syncookies", value: "1" }
-    - { key: "net.ipv4.conf.all.rp_filter", value: "1" }
-    - { key: "net.ipv4.conf.default.rp_filter", value: "1" }
-    - { key: "net.ipv4.conf.all.accept_source_route", value: "0" }
-    - { key: "net.ipv6.conf.all.accept_source_route", value: "0" }
-    - { key: "net.ipv4.conf.all.send_redirects", value: "0" }
-    - { key: "net.ipv4.conf.all.accept_redirects", value: "0" }
-    - { key: "net.ipv6.conf.all.accept_redirects", value: "0" }
-    - { key: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
-    - { key: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
-    - { key: "fs.file-max", value: "65535" }
-    - { key: "vm.swappiness", value: "10" }
-  tags: [common, sysctl, security]
+  loop: "{{ sysctl_settings | dict2items }}"
+  vars:
+    sysctl_settings:
+      # Network security
+      net.ipv4.tcp_syncookies: '1'
+      net.ipv4.conf.all.rp_filter: '1'
+      net.ipv4.conf.default.rp_filter: '1'
+      net.ipv4.conf.all.accept_source_route: '0'
+      net.ipv6.conf.all.accept_source_route: '0'
+      net.ipv4.conf.all.send_redirects: '0'
+      net.ipv4.conf.all.accept_redirects: '0'
+      net.ipv6.conf.all.accept_redirects: '0'
+      net.ipv4.icmp_echo_ignore_broadcasts: '1'
+      net.ipv4.icmp_ignore_bogus_error_responses: '1'
+      # Performance
+      fs.file-max: '2097152'
+      vm.swappiness: "{{ performance_vm_swappiness }}"
+      vm.dirty_ratio: "{{ performance_vm_dirty_ratio }}"
+      vm.dirty_background_ratio: "{{ performance_vm_dirty_background_ratio }}"
+      # Network performance
+      net.core.rmem_default: '31457280'
+      net.core.rmem_max: '67108864'
+      net.core.wmem_default: '31457280'
+      net.core.wmem_max: '67108864'
+      net.core.netdev_max_backlog: '65536'
+      net.core.somaxconn: '65535'
+      net.ipv4.tcp_max_syn_backlog: '65536'
+      net.ipv4.tcp_congestion_control: 'bbr'
+      net.core.default_qdisc: 'fq'
+      net.ipv4.tcp_fastopen: '3'
+  tags: [common, sysctl, security, performance]
 
 - name: Create backup directories
   ansible.builtin.file:
@@ -81,9 +116,68 @@
     state: directory
     owner: root
     group: root
-    mode: "0750"
+    mode: '0750'
   loop:
     - /backup
     - /backup/mailcow
     - /backup/config
+    - /backup/scripts
   tags: [common, backup]
+
+- name: Create log directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: adm
+    mode: '0750'
+  loop:
+    - /var/log/summitethic
+    - /var/log/summitethic/ansible
+  tags: [common, logging]
+
+- name: Configure log rotation
+  ansible.builtin.template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/summitethic
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [common, logging]
+
+- name: Set up swap file if not exists
+  block:
+    - name: Check if swap file exists
+      ansible.builtin.stat:
+        path: /swapfile
+      register: swap_file_check
+      
+    - name: Create swap file
+      ansible.builtin.command: |
+        dd if=/dev/zero of=/swapfile bs=1M count=2048
+      when: not swap_file_check.stat.exists
+      
+    - name: Set swap file permissions
+      ansible.builtin.file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: '0600'
+      when: not swap_file_check.stat.exists
+      
+    - name: Make swap file
+      ansible.builtin.command: mkswap /swapfile
+      when: not swap_file_check.stat.exists
+      
+    - name: Enable swap file
+      ansible.builtin.command: swapon /swapfile
+      when: not swap_file_check.stat.exists
+      
+    - name: Add swap file to fstab
+      ansible.posix.mount:
+        name: none
+        src: /swapfile
+        fstype: swap
+        opts: sw
+        state: present
+  tags: [common, swap]

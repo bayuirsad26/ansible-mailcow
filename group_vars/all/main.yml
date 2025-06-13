@@ -1,0 +1,134 @@
+---
+# Global configuration for all environments
+# Following ethical principles of transparency and security
+
+# System Configuration
+system_timezone: "Asia/Jakarta"
+system_locale: "en_US.UTF-8"
+system_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - python3-pip
+  - python3-setuptools
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - htop
+  - vim
+  - git
+  - rsync
+  - net-tools
+  - dnsutils
+  - ncdu
+  - iotop
+  - sysstat
+
+# Security Configuration (NIST SP 800-53 compliance)
+security_ssh_port: 2222
+security_fail2ban_enabled: true
+security_automatic_updates: true
+security_firewall_default_policy: deny
+security_audit_enabled: "{{ enable_audit_logging | default(true) }}"
+
+# SSH Security
+security_ssh_password_authentication: false
+security_ssh_permit_root_login: false
+security_ssh_permit_empty_passwords: false
+security_ssh_challenge_response_authentication: false
+security_ssh_gss_api_authentication: false
+security_ssh_x11_forwarding: false
+
+# Docker Configuration
+docker_edition: ce
+docker_version: "24.0.*"
+docker_compose_version: "2.24.5"
+docker_log_driver: "json-file"
+docker_log_options:
+  max-size: "10m"
+  max-file: "3"
+  compress: "true"
+  labels: "service,environment"
+
+# Docker security options
+docker_userns_remap: "default"
+docker_live_restore: true
+docker_userland_proxy: false
+
+# Traefik Configuration
+traefik_version: "3.0"
+traefik_dashboard_enabled: true
+traefik_dashboard_auth: "{{ vault_traefik_dashboard_auth }}"
+traefik_acme_email: "{{ vault_traefik_acme_email | default('admin@summitethic.com') }}"
+traefik_network_name: proxy
+traefik_log_level: INFO
+traefik_access_log_enabled: true
+
+# Let's Encrypt configuration
+letsencrypt_staging: "{{ 'true' if environment == 'staging' else 'false' }}"
+letsencrypt_key_type: EC384
+
+# Mailcow Configuration
+mailcow_version: "2024.01"
+mailcow_install_path: /opt/mailcow-dockerized
+mailcow_branch: master
+mailcow_timezone: "{{ system_timezone }}"
+
+# Mailcow feature flags
+mailcow_skip_clamd: false
+mailcow_skip_solr: false
+mailcow_skip_sogo: false
+mailcow_enable_fido2: true
+
+# Mailcow resource limits
+mailcow_mysql_max_connections: 500
+mailcow_mysql_innodb_buffer_pool_size: 1G
+mailcow_redis_maxmemory: 512mb
+
+# Monitoring Configuration (Grafana Stack)
+monitoring_retention_days: 30
+prometheus_version: "2.48.0"
+grafana_version: "10.3.1"
+loki_version: "2.9.4"
+alertmanager_version: "0.26.0"
+node_exporter_version: "1.7.0"
+
+# Prometheus scrape intervals
+prometheus_scrape_interval: 15s
+prometheus_evaluation_interval: 15s
+
+# Grafana plugins
+grafana_plugins:
+  - grafana-clock-panel
+  - grafana-simple-json-datasource
+  - grafana-piechart-panel
+  - grafana-worldmap-panel
+
+# Backup Configuration
+backup_enabled: true
+backup_schedule: "0 3 * * *"  # 3 AM daily
+backup_retention_days: 30
+backup_compression: gzip
+backup_encryption_enabled: true
+backup_verify_enabled: true
+
+# Cloudflare Configuration
+cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
+cloudflare_zone_id: "{{ vault_cloudflare_zone_id }}"
+cloudflare_proxied: false  # Don't proxy mail services
+cloudflare_ttl: 3600  # 1 hour
+
+# Ethical Compliance Settings
+compliance_gdpr_enabled: true
+compliance_data_retention_days: 365
+compliance_audit_logging: true
+compliance_encryption_at_rest: true
+compliance_log_anonymization: true
+
+# Performance tuning
+performance_vm_swappiness: 10
+performance_vm_dirty_ratio: 15
+performance_vm_dirty_background_ratio: 5

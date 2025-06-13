@@ -1,0 +1,77 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Backup verification script
+
+set -euo pipefail
+
+# Configuration
+BACKUP_PATH="{{ backup_destinations[0].path }}"
+LOG_FILE="/var/log/backup-verify.log"
+TEMP_DIR="/tmp/backup-verify-$$"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${LOG_FILE}"
+}
+
+# Cleanup function
+cleanup() {
+    rm -rf "${TEMP_DIR}"
+}
+trap cleanup EXIT
+
+log "Starting backup verification"
+
+# Find latest backup
+LATEST_BACKUP=$(find "${BACKUP_PATH}" -maxdepth 1 -type d -name "mailcow_backup_*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
+
+if [ -z "${LATEST_BACKUP}" ]; then
+    log "ERROR: No backup found to verify"
+    exit 1
+fi
+
+log "Verifying backup: ${LATEST_BACKUP}"
+
+# Create temp directory
+mkdir -p "${TEMP_DIR}"
+
+# Test 1: Check backup structure
+log "Test 1: Checking backup structure..."
+REQUIRED_FILES=(
+    "metadata.json"
+    "config.tar.gz"
+)
+
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ ! -f "${LATEST_BACKUP}/${file}" ]; then
+        log "ERROR: Required file missing: ${file}"
+        exit 1
+    fi
+done
+log "Test 1: PASSED"
+
+# Test 2: Verify archive integrity
+log "Test 2: Verifying archive integrity..."
+if ! tar -tzf "${LATEST_BACKUP}/config.tar.gz" >/dev/null 2>&1; then
+    log "ERROR: Config archive is corrupted"
+    exit 1
+fi
+log "Test 2: PASSED"
+
+# Test 3: Check metadata
+log "Test 3: Checking metadata..."
+if ! jq -r '.timestamp' "${LATEST_BACKUP}/metadata.json" >/dev/null 2>&1; then
+    log "ERROR: Invalid metadata JSON"
+    exit 1
+fi
+log "Test 3: PASSED"
+
+# Test 4: Verify backup size
+log "Test 4: Checking backup size..."
+BACKUP_SIZE=$(du -sm "${LATEST_BACKUP}" | cut -f1)
+if [ "${BACKUP_SIZE}" -lt 100 ]; then
+    log "WARNING: Backup size is suspiciously small: ${BACKUP_SIZE}MB"
+fi
+log "Test 4: PASSED (Size: ${BACKUP_SIZE}MB)"
+
+log "Backup verification completed successfully"

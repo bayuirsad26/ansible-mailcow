@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+# Fail2ban filter for Mailcow Postfix
+
+[Definition]
+failregex = ^.*\[<HOST>\]:.*NOQUEUE: reject:.*$
+            ^.*\[<HOST>\]:.*authentication failed.*$
+            ^.*lost connection after (AUTH|UNKNOWN|EHLO) from.*\[<HOST>\].*$
+            ^.*reject: RCPT from.*\[<HOST>\]: 554.*Relay access denied.*$
+            ^.*reject: RCPT from.*\[<HOST>\]: 450.*Sender address rejected.*$
+            ^.*reject: RCPT from.*\[<HOST>\]: 554.*Recipient address rejected.*$
+            ^.*SASL (PLAIN|LOGIN) authentication failed.*\[<HOST>\].*$
+
+ignoreregex = 

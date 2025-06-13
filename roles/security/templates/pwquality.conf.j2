@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+# Password quality configuration for SummitEthic
+
+# Minimum password length
+minlen = 14
+
+# Require at least one digit
+dcredit = -1
+
+# Require at least one uppercase character
+ucredit = -1
+
+# Require at least one lowercase character
+lcredit = -1
+
+# Require at least one special character
+ocredit = -1
+
+# Reject passwords with more than 2 consecutive identical characters
+maxrepeat = 2
+
+# Reject passwords with more than 2 characters of the same class consecutively
+maxclassrepeat = 2
+
+# Check if password contains user name
+usercheck = 1
+
+# Enforce for root user
+enforcing = 1
+
+# Reject passwords containing dictionary words
+dictcheck = 1

@@ -1,0 +1,61 @@
+---
+# Update monitoring dashboards and configurations
+
+- name: Update monitoring configuration
+  hosts: monitoring
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Update Prometheus configuration
+      ansible.builtin.template:
+        src: ../roles/monitoring/templates/prometheus.yml.j2
+        dest: /opt/monitoring/prometheus/prometheus.yml
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+      notify: restart prometheus
+      tags: [prometheus]
+
+    - name: Update Grafana dashboards
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/dashboards/import"
+        method: POST
+        user: admin
+        password: "{{ monitoring_grafana_config.security.admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          dashboard:
+            id: "{{ item.id }}"
+            title: "{{ item.title }}"
+          overwrite: true
+          inputs:
+            - name: DS_PROMETHEUS
+              type: datasource
+              pluginId: prometheus
+              value: Prometheus
+      loop:
+        - { id: 1860, title: "Node Exporter Full" }
+        - { id: 193, title: "Docker Monitoring" }
+        - { id: 10990, title: "Postfix Mail" }
+        - { id: 14981, title: "Nginx" }
+        - { id: 12539, title: "Redis" }
+      tags: [grafana, dashboards]
+
+    - name: Reload monitoring services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: reloaded
+      loop:
+        - prometheus
+        - grafana-server
+        - alertmanager
+      tags: [reload]
+
+  handlers:
+    - name: Restart prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        state: restarted

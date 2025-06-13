@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+# Fail2ban filter for Mailcow Rspamd
+
+[Definition]
+failregex = ^.*rspamd.*<HOST>.*rejected.*$
+            ^.*rspamd.*<HOST>.*greylisted.*$
+
+ignoreregex = 

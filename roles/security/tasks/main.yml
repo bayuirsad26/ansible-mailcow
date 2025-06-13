@@ -2,25 +2,62 @@
 # Security hardening following NIST SP 800-53 and CIS benchmarks
 # Ethical security implementation with transparency
 
-- name: Configure SSH hardening
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
+- name: Install security packages
+  ansible.builtin.apt:
+    name:
+      - libpam-pwquality
+      - aide
+      - rkhunter
+      - lynis
+      - apparmor-utils
     state: present
-    validate: "sshd -t -f %s"
-  loop:
-    - { regexp: "^#?Port", line: "Port {{ security_ssh_port }}" }
-    - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
-    - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
-    - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
-    - { regexp: "^#?PermitEmptyPasswords", line: "PermitEmptyPasswords no" }
-    - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries 3" }
-    - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval 300" }
-    - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax 2" }
-    - { regexp: "^#?X11Forwarding", line: "X11Forwarding no" }
-    - { regexp: "^#?AllowUsers", line: "AllowUsers {{ ansible_user }}" }
+  tags: [security, packages]
+
+- name: Ensure AppArmor is enabled
+  ansible.builtin.systemd:
+    name: apparmor
+    enabled: true
+    state: started
+  tags: [security, apparmor]
+
+- name: Configure SSH hardening
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0600'
+    validate: 'sshd -t -f %s'
+    backup: true
   notify: restart ssh
+  tags: [security, ssh]
+
+- name: Configure SSH client hardening
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: /etc/ssh/ssh_config
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [security, ssh]
+
+- name: Generate SSH host keys if not exist
+  ansible.builtin.command: ssh-keygen -A
+  args:
+    creates: /etc/ssh/ssh_host_ed25519_key
+  tags: [security, ssh]
+
+- name: Set correct permissions for SSH host keys
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/ssh/ssh_host_rsa_key, mode: '0600' }
+    - { path: /etc/ssh/ssh_host_rsa_key.pub, mode: '0644' }
+    - { path: /etc/ssh/ssh_host_ed25519_key, mode: '0600' }
+    - { path: /etc/ssh/ssh_host_ed25519_key.pub, mode: '0644' }
   tags: [security, ssh]
 
 - name: Configure UFW firewall defaults
@@ -30,14 +67,16 @@
   loop:
     - { direction: incoming, policy: deny }
     - { direction: outgoing, policy: allow }
+    - { direction: routed, policy: deny }
   tags: [security, firewall]
 
 - name: Configure UFW firewall rules
   community.general.ufw:
     rule: "{{ item.rule }}"
-    port: "{{ item.port }}"
+    port: "{{ item.port | string }}"
     proto: "{{ item.proto | default('tcp') }}"
     comment: "{{ item.comment }}"
+    from_ip: "{{ item.from_ip | default('any') }}"
   loop:
     - { rule: limit, port: "{{ security_ssh_port }}", comment: "SSH rate limiting" }
     - { rule: allow, port: 80, comment: "HTTP for Let's Encrypt" }
@@ -50,42 +89,61 @@
     - { rule: allow, port: 4190, comment: "Sieve" }
   tags: [security, firewall]
 
+- name: Enable UFW logging
+  community.general.ufw:
+    logging: 'on'
+  tags: [security, firewall]
+
 - name: Enable UFW firewall
   community.general.ufw:
     state: enabled
   tags: [security, firewall]
 
-- name: Configure fail2ban for SSH
+- name: Configure fail2ban
   ansible.builtin.template:
-    src: fail2ban_jail.local.j2
-    dest: /etc/fail2ban/jail.local
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     owner: root
     group: root
-    mode: "0644"
+    mode: '0644'
+  loop:
+    - { src: fail2ban_jail.local.j2, dest: /etc/fail2ban/jail.local }
+    - { src: fail2ban_defaults.conf.j2, dest: /etc/fail2ban/fail2ban.d/defaults.conf }
   notify: restart fail2ban
   tags: [security, fail2ban]
 
-- name: Configure fail2ban for mail services
+- name: Configure fail2ban filters for mail services
   ansible.builtin.template:
     src: "fail2ban_{{ item }}.conf.j2"
     dest: "/etc/fail2ban/filter.d/{{ item }}.conf"
     owner: root
     group: root
-    mode: "0644"
+    mode: '0644'
   loop:
     - mailcow-postfix
     - mailcow-dovecot
     - mailcow-sogo
+    - mailcow-rspamd
   notify: restart fail2ban
+  tags: [security, fail2ban]
+
+- name: Ensure fail2ban is started and enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
   tags: [security, fail2ban]
 
 - name: Configure automatic security updates
   ansible.builtin.template:
-    src: 50unattended-upgrades.j2
-    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     owner: root
     group: root
-    mode: "0644"
+    mode: '0644'
+  loop:
+    - { src: 50unattended-upgrades.j2, dest: /etc/apt/apt.conf.d/50unattended-upgrades }
+    - { src: 20auto-upgrades.j2, dest: /etc/apt/apt.conf.d/20auto-upgrades }
   tags: [security, updates]
 
 - name: Enable automatic security updates
@@ -101,36 +159,126 @@
     dest: /etc/sysctl.d/99-security.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: '0644'
   notify: reload sysctl
   tags: [security, kernel]
 
 - name: Configure password quality requirements
+  ansible.builtin.template:
+    src: pwquality.conf.j2
+    dest: /etc/security/pwquality.conf
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [security, passwords]
+
+- name: Configure PAM for strong password policy
+  ansible.builtin.template:
+    src: "pam_{{ item }}.j2"
+    dest: "/etc/pam.d/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - common-password
+    - common-auth
+  tags: [security, pam]
+
+- name: Set login.defs security parameters
   ansible.builtin.lineinfile:
-    path: /etc/security/pwquality.conf
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
+    path: /etc/login.defs
+    regexp: "^{{ item.key }}"
+    line: "{{ item.key }} {{ item.value }}"
     state: present
   loop:
-    - { regexp: "^# minlen", line: "minlen = 14" }
-    - { regexp: "^# dcredit", line: "dcredit = -1" }
-    - { regexp: "^# ucredit", line: "ucredit = -1" }
-    - { regexp: "^# ocredit", line: "ocredit = -1" }
-    - { regexp: "^# lcredit", line: "lcredit = -1" }
+    - { key: 'PASS_MAX_DAYS', value: '90' }
+    - { key: 'PASS_MIN_DAYS', value: '7' }
+    - { key: 'PASS_WARN_AGE', value: '14' }
+    - { key: 'ENCRYPT_METHOD', value: 'SHA512' }
+    - { key: 'SHA_CRYPT_MIN_ROUNDS', value: '10000' }
+    - { key: 'UMASK', value: '027' }
   tags: [security, passwords]
 
 - name: Configure audit logging
-  ansible.builtin.package:
-    name: auditd
-    state: present
+  when: security_audit_enabled | bool
+  block:
+    - name: Install auditd
+      ansible.builtin.package:
+        name: auditd
+        state: present
+        
+    - name: Configure audit rules
+      ansible.builtin.template:
+        src: audit.rules.j2
+        dest: /etc/audit/rules.d/summitethic.rules
+        owner: root
+        group: root
+        mode: '0640'
+      notify: restart auditd
+      
+    - name: Configure auditd
+      ansible.builtin.template:
+        src: auditd.conf.j2
+        dest: /etc/audit/auditd.conf
+        owner: root
+        group: root
+        mode: '0640'
+      notify: restart auditd
+      
+    - name: Ensure auditd is started and enabled
+      ansible.builtin.systemd:
+        name: auditd
+        enabled: true
+        state: started
   tags: [security, audit]
 
-- name: Configure audit rules
-  ansible.builtin.template:
-    src: audit.rules.j2
-    dest: /etc/audit/rules.d/audit.rules
-    owner: root
-    group: root
-    mode: "0640"
-  notify: restart auditd
-  tags: [security, audit]
+- name: Secure shared memory
+  ansible.posix.mount:
+    name: /run/shm
+    src: none
+    fstype: tmpfs
+    opts: defaults,noexec,nosuid,nodev
+    state: mounted
+  tags: [security, hardening]
+
+- name: Set secure permissions on sensitive files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/passwd, mode: '0644' }
+    - { path: /etc/shadow, mode: '0640', group: shadow }
+    - { path: /etc/group, mode: '0644' }
+    - { path: /etc/gshadow, mode: '0640', group: shadow }
+    - { path: /etc/ssh/sshd_config, mode: '0600' }
+    - { path: /etc/sudoers, mode: '0440' }
+    - { path: /etc/crontab, mode: '0600' }
+    - { path: /var/log/auth.log, mode: '0640', group: adm }
+    - { path: /var/log/syslog, mode: '0640', group: adm }
+  tags: [security, permissions]
+
+- name: Remove unnecessary packages
+  ansible.builtin.apt:
+    name:
+      - telnet
+      - rsh-client
+      - rsh-redone-client
+    state: absent
+    purge: true
+  tags: [security, cleanup]
+
+- name: Disable unnecessary services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - cups
+    - avahi-daemon
+    - isc-dhcp-server
+    - isc-dhcp-server6
+    - rpcbind
+  failed_when: false
+  tags: [security, services]

@@ -1,0 +1,81 @@
+# {{ ansible_managed }}
+# OpenSSH Server configuration for SummitEthic
+# Security hardened according to CIS benchmarks
+
+# Network settings
+Port {{ security_ssh_port }}
+AddressFamily inet
+ListenAddress {{ ansible_default_ipv4.address }}
+
+# Host keys
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+# Logging
+SyslogFacility AUTH
+LogLevel VERBOSE
+
+# Authentication
+LoginGraceTime 60
+PermitRootLogin {{ security_ssh_permit_root_login | ternary('yes', 'no') }}
+StrictModes yes
+MaxAuthTries 3
+MaxSessions 10
+
+# Password authentication
+PasswordAuthentication {{ security_ssh_password_authentication | ternary('yes', 'no') }}
+PermitEmptyPasswords {{ security_ssh_permit_empty_passwords | ternary('yes', 'no') }}
+ChallengeResponseAuthentication {{ security_ssh_challenge_response_authentication | ternary('yes', 'no') }}
+
+# Public key authentication
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+AuthorizedKeysCommand none
+AuthorizedKeysCommandUser nobody
+
+# Kerberos authentication
+KerberosAuthentication no
+KerberosOrLocalPasswd no
+KerberosTicketCleanup yes
+KerberosGetAFSToken no
+
+# GSSAPI authentication
+GSSAPIAuthentication {{ security_ssh_gss_api_authentication | ternary('yes', 'no') }}
+GSSAPICleanupCredentials yes
+
+# Other authentication methods
+UsePAM yes
+AllowAgentForwarding no
+AllowTcpForwarding no
+GatewayPorts no
+X11Forwarding {{ security_ssh_x11_forwarding | ternary('yes', 'no') }}
+X11DisplayOffset 10
+X11UseLocalhost yes
+PermitTTY yes
+PrintMotd no
+PrintLastLog yes
+TCPKeepAlive yes
+PermitUserEnvironment no
+Compression delayed
+ClientAliveInterval 300
+ClientAliveCountMax 2
+UseDNS no
+PidFile /var/run/sshd.pid
+MaxStartups 10:30:100
+PermitTunnel no
+ChrootDirectory none
+VersionAddendum none
+
+# Ciphers and algorithms
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,umac-128@openssh.com
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
+
+# Banner
+Banner /etc/issue.net
+
+# Allow specific users
+AllowUsers {{ ansible_user }}
+
+# Subsystem
+Subsystem sftp /usr/lib/openssh/sftp-server -f AUTHPRIV -l INFO

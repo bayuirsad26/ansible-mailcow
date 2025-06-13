@@ -1,0 +1,15 @@
+---
+exclude_paths:
+  - .venv/
+  - venv/
+  - molecule/
+  - .git/
+  - .github/
+
+skip_list:
+  - yaml[line-length]  # Lines can be long in some cases
+  - name[casing]       # We use descriptive names
+
+warn_list:
+  - experimental       # Warn on experimental features
+  - fqcn[action-core] # Ensure FQCN usage

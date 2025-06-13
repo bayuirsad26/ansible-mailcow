@@ -1,8 +1,14 @@
 ---
 - name: Reload sysctl
-  ansible.builtin.command: sysctl -p
+  ansible.builtin.command: sysctl -p /etc/sysctl.d/99-summitethic.conf
+  
 - name: Restart ssh
   ansible.builtin.systemd:
     name: sshd
     state: restarted
     daemon_reload: true
+    
+- name: Restart cron
+  ansible.builtin.systemd:
+    name: cron
+    state: restarted

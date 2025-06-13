@@ -1,0 +1,27 @@
+# {{ ansible_managed }}
+# Log rotation for SummitEthic services
+
+/var/log/summitethic/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    postrotate
+        # Signal any services that need to reopen log files
+        systemctl reload rsyslog > /dev/null 2>&1 || true
+    endscript
+}
+
+/var/log/mailcow-backup.log {
+    weekly
+    missingok
+    rotate 4
+    compress
+    delaycompress
+    notifempty
+    create 0640 root adm
+}

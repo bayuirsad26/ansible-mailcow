@@ -1,0 +1,54 @@
+# {{ ansible_managed }}
+# Fail2ban default configuration
+
+[Definition]
+# Option: loglevel
+# Notes.: Set the log level output.
+#         CRITICAL
+#         ERROR
+#         WARNING
+#         NOTICE
+#         INFO
+#         DEBUG
+# Values: [ LEVEL ]  Default: INFO
+loglevel = INFO
+
+# Option: logtarget
+# Notes.: Set the log target. This could be a file, SYSLOG, STDERR or STDOUT.
+# Values: [ STDOUT | STDERR | SYSLOG | SYSOUT | FILE ]  Default: STDERR
+logtarget = /var/log/fail2ban.log
+
+# Option: syslogsocket
+# Notes.: Set the syslog socket file. Only used when logtarget is SYSLOG
+# Values: [ FILE ]  Default: auto
+syslogsocket = auto
+
+# Option: socket
+# Notes.: Set the socket file. This is used to communicate with the daemon.
+# Values: [ FILE ]  Default: /var/run/fail2ban/fail2ban.sock
+socket = /var/run/fail2ban/fail2ban.sock
+
+# Option: pidfile
+# Notes.: Set the PID file.
+# Values: [ FILE ]  Default: /var/run/fail2ban/fail2ban.pid
+pidfile = /var/run/fail2ban/fail2ban.pid
+
+# Option: allowipv6
+# Notes.: Allows IPv6 interface
+# Values: [ auto yes (on, true, 1) no (off, false, 0) ] Default: auto
+allowipv6 = auto
+
+# Option: dbfile
+# Notes.: Set the file for the fail2ban persistent data to be stored.
+# Values: [ FILE ]  Default: /var/lib/fail2ban/fail2ban.sqlite3
+dbfile = /var/lib/fail2ban/fail2ban.sqlite3
+
+# Option: dbpurgeage
+# Notes.: Sets age at which bans should be purged from the database
+# Values: [ SECONDS ]  Default: 86400 (24hours)
+dbpurgeage = 2592000
+
+# Option: dbmaxmatches
+# Notes.: Max number of matches stored in database per ticket
+# Values: [ INT ]  Default: 10
+dbmaxmatches = 20
