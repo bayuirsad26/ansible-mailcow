@@ -1,0 +1,16 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Override variables for testing
+    security_ssh_port: 22 # Keep default for testing
+    security_fail2ban_enabled: false # Disable for container testing
+    backup_enabled: false # Disable for testing
+
+  tasks:
+    - name: "Include role under test"
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"

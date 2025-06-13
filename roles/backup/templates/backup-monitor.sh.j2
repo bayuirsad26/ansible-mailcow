@@ -1,0 +1,46 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Backup monitoring script for SummitEthic
+
+set -euo pipefail
+
+# Configuration
+BACKUP_PATH="{{ backup_destinations[0].path }}"
+MAX_AGE_HOURS=26  # Alert if no backup in 26 hours
+MIN_SIZE_MB=100   # Alert if backup smaller than 100MB
+PROMETHEUS_PUSHGATEWAY="http://localhost:9091"
+
+# Find latest backup
+LATEST_BACKUP=$(find "${BACKUP_PATH}" -maxdepth 1 -type d -name "mailcow_backup_*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
+
+if [ -z "${LATEST_BACKUP}" ]; then
+    echo "backup_status 0" | curl --data-binary @- ${PROMETHEUS_PUSHGATEWAY}/metrics/job/backup_monitor
+    exit 1
+fi
+
+# Check backup age
+BACKUP_AGE=$(( ($(date +%s) - $(stat -c %Y "${LATEST_BACKUP}")) / 3600 ))
+
+# Check backup size
+BACKUP_SIZE=$(du -sm "${LATEST_BACKUP}" | cut -f1)
+
+# Push metrics to Prometheus
+cat <<EOF | curl --data-binary @- ${PROMETHEUS_PUSHGATEWAY}/metrics/job/backup_monitor
+# TYPE backup_age_hours gauge
+backup_age_hours ${BACKUP_AGE}
+# TYPE backup_size_mb gauge
+backup_size_mb ${BACKUP_SIZE}
+# TYPE backup_status gauge
+backup_status 1
+EOF
+
+# Check thresholds
+if [ ${BACKUP_AGE} -gt ${MAX_AGE_HOURS} ]; then
+    echo "WARNING: Latest backup is ${BACKUP_AGE} hours old" | \
+        mail -s "[{{ mailcow_hostname }}] Backup monitoring alert" {{ vault_backup_notification_email }}
+fi
+
+if [ ${BACKUP_SIZE} -lt ${MIN_SIZE_MB} ]; then
+    echo "WARNING: Latest backup is only ${BACKUP_SIZE}MB" | \
+        mail -s "[{{ mailcow_hostname }}] Backup size alert" {{ vault_backup_notification_email }}
+fi

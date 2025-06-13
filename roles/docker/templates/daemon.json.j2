@@ -1,0 +1,29 @@
+{
+  "log-driver": "{{ docker_log_driver }}",
+  "log-opts": {{ docker_log_options | to_json }},
+  "storage-driver": "overlay2",
+  "storage-opts": [
+    "overlay2.override_kernel_check=true"
+  ],
+  "metrics-addr": "127.0.0.1:9323",
+  "experimental": false,
+  "features": {
+    "buildkit": true
+  },
+  "live-restore": true,
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 64000,
+      "Soft": 64000
+    }
+  },
+  "shutdown-timeout": 30,
+  "userland-proxy": false,
+  "no-new-privileges": true,
+  "seccomp-profile": "/etc/docker/seccomp.json",
+  "icc": false,
+  "disable-legacy-registry": true,
+  "insecure-registries": [],
+  "registry-mirrors": []
+}

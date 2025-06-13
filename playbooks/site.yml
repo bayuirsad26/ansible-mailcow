@@ -1,0 +1,75 @@
+---
+# Main deployment playbook for SummitEthic Mailcow infrastructure
+# Orchestrates all components with ethical considerations
+
+- name: Deploy complete Mailcow infrastructure
+  hosts: mailservers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify Ansible version
+      ansible.builtin.assert:
+        that:
+          - ansible_version.full is version('2.9', '>=')
+        msg: "This playbook requires Ansible 2.9 or higher"
+      tags: [always]
+
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg: |
+          Deploying Mailcow infrastructure for SummitEthic
+          Target: {{ inventory_hostname }}
+          Environment: {{ environment }}
+          Ethical compliance mode: {{ compliance_gdpr_enabled }}
+      tags: [always]
+
+  roles:
+    - role: common
+      tags: [common]
+
+    - role: security
+      tags: [security]
+      when: security_hardening_enabled | default(true)
+
+    - role: docker
+      tags: [docker]
+
+    - role: traefik
+      tags: [traefik, proxy]
+
+    - role: mailcow
+      tags: [mailcow, mail]
+
+    - role: monitoring
+      tags: [monitoring, grafana]
+
+    - role: backup
+      tags: [backup]
+      when: backup_enabled | default(true)
+
+  post_tasks:
+    - name: Configure Cloudflare DNS records
+      community.general.cloudflare_dns:
+        zone: "{{ cloudflare_zone }}"
+        record: "{{ item.record }}"
+        type: "{{ item.type }}"
+        value: "{{ item.value }}"
+        proxied: "{{ item.proxied | default(false) }}"
+        api_token: "{{ cloudflare_api_token }}"
+      loop:
+        - { record: "mail", type: "A", value: "{{ ansible_default_ipv4.address }}" }
+        - { record: "@", type: "MX", value: "mail.{{ cloudflare_zone }}", priority: 10 }
+        - { record: "_dmarc", type: "TXT", value: "v=DMARC1; p=quarantine; rua=mailto:dmarc@{{ cloudflare_zone }}" }
+        - { record: "@", type: "TXT", value: "v=spf1 mx a -all" }
+      tags: [dns, cloudflare]
+
+    - name: Run system health check
+      ansible.builtin.include_tasks: health-check.yml
+      tags: [health, validation]
+
+    - name: Generate deployment report
+      ansible.builtin.template:
+        src: deployment-report.md.j2
+        dest: "/root/deployment-report-{{ ansible_date_time.epoch }}.md"
+      tags: [report, documentation]

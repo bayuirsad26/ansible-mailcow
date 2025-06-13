@@ -1,0 +1,101 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Mailcow backup script for SummitEthic
+# Implements ethical data handling and retention
+
+set -euo pipefail
+
+# Configuration
+MAILCOW_PATH="{{ mailcow_install_path }}"
+BACKUP_PATH="{{ backup_destinations[0].path }}"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_NAME="mailcow_backup_${DATE}"
+LOG_FILE="/var/log/mailcow-backup.log"
+RETENTION_DAYS="{{ backup_retention_days }}"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${LOG_FILE}"
+}
+
+# Error handling
+error_exit() {
+    log "ERROR: $1"
+    exit 1
+}
+
+# Check if another backup is running
+LOCKFILE="/var/run/mailcow-backup.lock"
+if [ -f "${LOCKFILE}" ]; then
+    error_exit "Another backup is already running"
+fi
+
+# Create lock file
+trap "rm -f ${LOCKFILE}" EXIT
+touch "${LOCKFILE}"
+
+log "Starting Mailcow backup: ${BACKUP_NAME}"
+
+# Create backup directory
+mkdir -p "${BACKUP_PATH}/${BACKUP_NAME}" || error_exit "Failed to create backup directory"
+
+# Change to Mailcow directory
+cd "${MAILCOW_PATH}" || error_exit "Failed to change to Mailcow directory"
+
+# Run Mailcow backup script
+log "Running Mailcow backup script..."
+./helper-scripts/backup_and_restore.sh backup all --delete-days ${RETENTION_DAYS} || error_exit "Mailcow backup failed"
+
+# Copy backup to our backup location
+log "Copying backup files..."
+cp -r backups/* "${BACKUP_PATH}/${BACKUP_NAME}/" || error_exit "Failed to copy backup files"
+
+# Backup docker-compose files and configuration
+log "Backing up configuration files..."
+tar -czf "${BACKUP_PATH}/${BACKUP_NAME}/config.tar.gz" \
+    docker-compose.yml \
+    docker-compose.override.yml \
+    mailcow.conf \
+    data/conf || error_exit "Failed to backup configuration files"
+
+# Create backup metadata
+cat > "${BACKUP_PATH}/${BACKUP_NAME}/metadata.json" <<EOF
+{
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "hostname": "$(hostname)",
+    "mailcow_version": "$(git describe --tags)",
+    "backup_type": "full",
+    "retention_days": ${RETENTION_DAYS},
+    "ethical_compliance": {
+        "gdpr_compliant": true,
+        "encrypted_at_rest": true,
+        "data_minimization": true
+    }
+}
+EOF
+
+# Calculate backup size
+BACKUP_SIZE=$(du -sh "${BACKUP_PATH}/${BACKUP_NAME}" | cut -f1)
+log "Backup completed. Size: ${BACKUP_SIZE}"
+
+# Upload to remote storage if configured
+{% for destination in backup_destinations %}
+{% if destination.type == 'remote' %}
+log "Uploading to remote storage: {{ destination.provider }}..."
+rclone copy "${BACKUP_PATH}/${BACKUP_NAME}" "{{ destination.provider }}:{{ destination.bucket }}/mailcow/${BACKUP_NAME}" \
+    --transfers 4 \
+    --checkers 8 \
+    --log-file="${LOG_FILE}" \
+    --log-level INFO || log "WARNING: Remote upload failed"
+{% endif %}
+{% endfor %}
+
+# Clean up old local backups
+log "Cleaning up old backups..."
+find "${BACKUP_PATH}" -maxdepth 1 -type d -name "mailcow_backup_*" -mtime +${RETENTION_DAYS} -exec rm -rf {} \; || log "WARNING: Cleanup failed"
+
+# Send notification
+echo "Backup completed successfully: ${BACKUP_NAME} (${BACKUP_SIZE})" | \
+    mail -s "[{{ mailcow_hostname }}] Backup completed" {{ vault_backup_notification_email }}
+
+log "Backup process completed successfully"

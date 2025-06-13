@@ -1,0 +1,124 @@
+---
+# Docker installation with security best practices
+# Following Docker CIS benchmark recommendations
+
+- name: Remove old Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker
+      - docker-engine
+      - docker.io
+      - containerd
+      - runc
+    state: absent
+  tags: [docker, cleanup]
+
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /usr/share/keyrings/docker-archive-keyring.gpg
+    state: present
+  tags: [docker, repository]
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_architecture }} signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release
+      }} stable"
+    state: present
+    filename: docker
+  tags: [docker, repository]
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - "docker-{{ docker_edition }}={{ docker_version }}"
+      - "docker-{{ docker_edition }}-cli={{ docker_version }}"
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  tags: [docker, packages]
+
+- name: Create Docker configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [docker, config]
+
+- name: Configure Docker daemon
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart docker
+  tags: [docker, config]
+
+- name: Create Docker service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [docker, systemd]
+
+- name: Configure Docker service overrides
+  ansible.builtin.template:
+    src: docker-override.conf.j2
+    dest: /etc/systemd/system/docker.service.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart docker
+  tags: [docker, systemd]
+
+- name: Configure Docker log rotation
+  ansible.builtin.template:
+    src: docker-logrotate.j2
+    dest: /etc/logrotate.d/docker
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [docker, logging]
+
+- name: Start and enable Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [docker, service]
+
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  tags: [docker, users]
+
+- name: Create Docker networks
+  community.docker.docker_network:
+    name: "{{ item }}"
+    driver: bridge
+    driver_options:
+      com.docker.network.bridge.name: "br-{{ item }}"
+  loop:
+    - "{{ traefik_network_name }}"
+    - mailcow-network
+  tags: [docker, networks]
+
+- name: Install Docker Python library for Ansible
+  ansible.builtin.pip:
+    name:
+      - docker
+      - docker-compose
+    state: present
+  tags: [docker, python]

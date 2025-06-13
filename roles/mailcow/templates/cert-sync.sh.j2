@@ -1,0 +1,60 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Certificate synchronization script for Mailcow with Traefik
+# Ensures SSL certificates are properly shared between services
+
+set -euo pipefail
+
+# Configuration
+TRAEFIK_CERT_PATH="/opt/traefik/certificates"
+MAILCOW_SSL_PATH="{{ mailcow_install_path }}/data/assets/ssl"
+DOMAIN="{{ mailcow_hostname }}"
+LOG_FILE="/var/log/cert-sync.log"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${LOG_FILE}"
+}
+
+# Check if Traefik certificates exist
+if [ ! -f "${TRAEFIK_CERT_PATH}/acme.json" ]; then
+    log "ERROR: Traefik acme.json not found"
+    exit 1
+fi
+
+# Extract certificates using traefik-certs-dumper
+log "Extracting certificates from Traefik..."
+docker run --rm \
+    -v ${TRAEFIK_CERT_PATH}:/traefik:ro \
+    -v ${MAILCOW_SSL_PATH}:/output:rw \
+    humenius/traefik-certs-dumper:latest \
+    file \
+    --source /traefik/acme.json \
+    --dest /output \
+    --domain-subdir=false \
+    --crt-name=cert \
+    --key-name=key \
+    --domain ${DOMAIN}
+
+# Set correct permissions
+log "Setting certificate permissions..."
+chmod 644 ${MAILCOW_SSL_PATH}/cert.pem 2>/dev/null || true
+chmod 600 ${MAILCOW_SSL_PATH}/key.pem 2>/dev/null || true
+chown root:root ${MAILCOW_SSL_PATH}/*.pem 2>/dev/null || true
+
+# Verify certificates
+if openssl x509 -in ${MAILCOW_SSL_PATH}/cert.pem -noout -subject | grep -q ${DOMAIN}; then
+    log "Certificate verification successful"
+    
+    # Reload Mailcow services to pick up new certificates
+    log "Reloading Mailcow services..."
+    cd {{ mailcow_install_path }}
+    docker compose exec -T nginx-mailcow nginx -s reload || log "WARNING: Failed to reload nginx"
+    docker compose exec -T postfix-mailcow postfix reload || log "WARNING: Failed to reload postfix"
+    docker compose exec -T dovecot-mailcow doveadm reload || log "WARNING: Failed to reload dovecot"
+    
+    log "Certificate sync completed successfully"
+else
+    log "ERROR: Certificate verification failed"
+    exit 1
+fi

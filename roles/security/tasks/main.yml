@@ -1,0 +1,136 @@
+---
+# Security hardening following NIST SP 800-53 and CIS benchmarks
+# Ethical security implementation with transparency
+
+- name: Configure SSH hardening
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+    validate: "sshd -t -f %s"
+  loop:
+    - { regexp: "^#?Port", line: "Port {{ security_ssh_port }}" }
+    - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
+    - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
+    - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
+    - { regexp: "^#?PermitEmptyPasswords", line: "PermitEmptyPasswords no" }
+    - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries 3" }
+    - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval 300" }
+    - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax 2" }
+    - { regexp: "^#?X11Forwarding", line: "X11Forwarding no" }
+    - { regexp: "^#?AllowUsers", line: "AllowUsers {{ ansible_user }}" }
+  notify: restart ssh
+  tags: [security, ssh]
+
+- name: Configure UFW firewall defaults
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+  tags: [security, firewall]
+
+- name: Configure UFW firewall rules
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto | default('tcp') }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { rule: limit, port: "{{ security_ssh_port }}", comment: "SSH rate limiting" }
+    - { rule: allow, port: 80, comment: "HTTP for Let's Encrypt" }
+    - { rule: allow, port: 443, comment: "HTTPS" }
+    - { rule: allow, port: 25, comment: "SMTP" }
+    - { rule: allow, port: 465, comment: "SMTPS" }
+    - { rule: allow, port: 587, comment: "Submission" }
+    - { rule: allow, port: 993, comment: "IMAPS" }
+    - { rule: allow, port: 995, comment: "POP3S" }
+    - { rule: allow, port: 4190, comment: "Sieve" }
+  tags: [security, firewall]
+
+- name: Enable UFW firewall
+  community.general.ufw:
+    state: enabled
+  tags: [security, firewall]
+
+- name: Configure fail2ban for SSH
+  ansible.builtin.template:
+    src: fail2ban_jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart fail2ban
+  tags: [security, fail2ban]
+
+- name: Configure fail2ban for mail services
+  ansible.builtin.template:
+    src: "fail2ban_{{ item }}.conf.j2"
+    dest: "/etc/fail2ban/filter.d/{{ item }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - mailcow-postfix
+    - mailcow-dovecot
+    - mailcow-sogo
+  notify: restart fail2ban
+  tags: [security, fail2ban]
+
+- name: Configure automatic security updates
+  ansible.builtin.template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [security, updates]
+
+- name: Enable automatic security updates
+  ansible.builtin.systemd:
+    name: unattended-upgrades
+    enabled: true
+    state: started
+  tags: [security, updates]
+
+- name: Set secure kernel parameters
+  ansible.builtin.template:
+    src: 99-security.conf.j2
+    dest: /etc/sysctl.d/99-security.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload sysctl
+  tags: [security, kernel]
+
+- name: Configure password quality requirements
+  ansible.builtin.lineinfile:
+    path: /etc/security/pwquality.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: "^# minlen", line: "minlen = 14" }
+    - { regexp: "^# dcredit", line: "dcredit = -1" }
+    - { regexp: "^# ucredit", line: "ucredit = -1" }
+    - { regexp: "^# ocredit", line: "ocredit = -1" }
+    - { regexp: "^# lcredit", line: "lcredit = -1" }
+  tags: [security, passwords]
+
+- name: Configure audit logging
+  ansible.builtin.package:
+    name: auditd
+    state: present
+  tags: [security, audit]
+
+- name: Configure audit rules
+  ansible.builtin.template:
+    src: audit.rules.j2
+    dest: /etc/audit/rules.d/audit.rules
+    owner: root
+    group: root
+    mode: "0640"
+  notify: restart auditd
+  tags: [security, audit]

@@ -1,0 +1,108 @@
+---
+# Cloudflare DNS automation for SummitEthic
+# Manages DNS records programmatically
+
+- name: Get Cloudflare zone information
+  uri:
+    url: "https://api.cloudflare.com/client/v4/zones/{{ cloudflare_zone_id }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cloudflare_api_token }}"
+      Content-Type: "application/json"
+  register: zone_info
+
+- name: Configure A record for mail server
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "mail"
+    type: "A"
+    value: "{{ ansible_default_ipv4.address }}"
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  register: a_record
+
+- name: Configure MX record
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "@"
+    type: "MX"
+    value: "mail.{{ zone_info.json.result.name }}"
+    priority: 10
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  register: mx_record
+
+- name: Configure SPF record
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "@"
+    type: "TXT"
+    value: "v=spf1 mx a ~all"
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  register: spf_record
+
+- name: Configure DMARC record
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "_dmarc"
+    type: "TXT"
+    value: "v=DMARC1; p=quarantine; rua=mailto:dmarc@{{ zone_info.json.result.name }}; ruf=mailto:dmarc@{{ zone_info.json.result.name }}; fo=1"
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  register: dmarc_record
+
+- name: Get DKIM key from Mailcow
+  uri:
+    url: "https://{{ mailcow_hostname }}/api/v1/get/dkim/{{ zone_info.json.result.name }}"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_config.API_KEY }}"
+    validate_certs: yes
+  register: dkim_key
+  retries: 5
+  delay: 30
+  until: dkim_key.status == 200
+
+- name: Configure DKIM record
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "dkim._domainkey"
+    type: "TXT"
+    value: "{{ dkim_key.json[0].dkim_txt }}"
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  when: dkim_key.json | length > 0
+  register: dkim_record
+
+- name: Configure autodiscover record
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "autodiscover"
+    type: "CNAME"
+    value: "mail.{{ zone_info.json.result.name }}"
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  register: autodiscover_record
+
+- name: Configure autoconfig record
+  cloudflare_dns:
+    zone: "{{ zone_info.json.result.name }}"
+    record: "autoconfig"
+    type: "CNAME"
+    value: "mail.{{ zone_info.json.result.name }}"
+    proxied: false
+    api_token: "{{ cloudflare_api_token }}"
+  register: autoconfig_record
+
+- name: Display DNS configuration summary
+  debug:
+    msg: |
+      DNS Configuration Summary:
+      - A Record: {{ a_record.record.name }} -> {{ a_record.record.content }}
+      - MX Record: {{ mx_record.record.name }} -> {{ mx_record.record.content }}
+      - SPF: Configured
+      - DKIM: {{ 'Configured' if dkim_record is defined else 'Pending' }}
+      - DMARC: Configured
+      - Autodiscover: Configured
+      - Autoconfig: Configured

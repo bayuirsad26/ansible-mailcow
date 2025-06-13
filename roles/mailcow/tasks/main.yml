@@ -1,0 +1,81 @@
+---
+# Mailcow installation with Traefik integration
+# Ethical email server implementation
+
+- name: Clone Mailcow repository
+  ansible.builtin.git:
+    repo: https://github.com/mailcow/mailcow-dockerized
+    dest: "{{ mailcow_install_path }}"
+    version: "{{ mailcow_branch }}"
+    force: true
+  tags: [mailcow, git]
+
+- name: Generate Mailcow configuration
+  ansible.builtin.shell: |
+    cd {{ mailcow_install_path }}
+    ./generate_config.sh
+  args:
+    creates: "{{ mailcow_install_path }}/mailcow.conf"
+  environment:
+    MAILCOW_HOSTNAME: "{{ mailcow_config.MAILCOW_HOSTNAME }}"
+  tags: [mailcow, config]
+
+- name: Update Mailcow configuration
+  ansible.builtin.lineinfile:
+    path: "{{ mailcow_install_path }}/mailcow.conf"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    state: present
+  loop: "{{ mailcow_config | dict2items }}"
+  notify: restart mailcow
+  tags: [mailcow, config]
+
+- name: Create Mailcow docker-compose override for Traefik
+  ansible.builtin.template:
+    src: docker-compose.override.yml.j2
+    dest: "{{ mailcow_install_path }}/docker-compose.override.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [mailcow, traefik]
+
+- name: Create certificate sync script
+  ansible.builtin.template:
+    src: cert-sync.sh.j2
+    dest: "{{ mailcow_install_path }}/cert-sync.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [mailcow, certificates]
+
+- name: Pull Mailcow Docker images
+  ansible.builtin.shell: |
+    cd {{ mailcow_install_path }}
+    docker compose pull
+  tags: [mailcow, docker]
+
+- name: Start Mailcow services
+  ansible.builtin.shell: |
+    cd {{ mailcow_install_path }}
+    docker compose up -d
+  tags: [mailcow, service]
+
+- name: Wait for Mailcow to be healthy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:8080/api/v1/get/status/containers"
+    headers:
+      X-API-Key: "{{ mailcow_config.API_KEY_READ_ONLY }}"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 10
+  tags: [mailcow, health]
+
+- name: Configure certificate sync cron job
+  ansible.builtin.cron:
+    name: "Sync Traefik certificates to Mailcow"
+    minute: "*/5"
+    job: "{{ mailcow_install_path }}/cert-sync.sh > /dev/null 2>&1"
+    user: root
+  tags: [mailcow, cron]

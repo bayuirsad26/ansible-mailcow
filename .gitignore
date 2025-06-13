@@ -1,0 +1,71 @@
+# .gitignore for Ansible Projects
+
+# ==> Ansible Vault
+# Ignore the vault password file. NEVER commit this.
+vault.password
+*.vault
+
+# ==> Ansible Temporary Files
+# These are created when a playbook fails and you choose to retry.
+*.retry
+
+# ==> Ansible Log Files
+# If you are logging Ansible output to a file.
+ansible.log
+
+# ==> Local Inventory Files
+# It's good practice to keep production inventories and sensitive variables
+# out of the repository. You can use a template or an example file instead.
+# For example, you might want to ignore the entire production inventory.
+# inventories/production/
+# Or specific sensitive files
+# inventories/production/hosts.yml
+inventories/production/group_vars/all/secrets.yml
+
+# ==> Ansible Roles & Collections from Galaxy
+# Ignore roles/collections downloaded from Ansible Galaxy or other sources.
+# Your dependencies should be managed in a requirements.yml file.
+.ansible
+
+# ==> Molecule
+# Ignore molecule's temporary instance and scenario data.
+.molecule/
+.pytest_cache/
+.tox/
+
+# ==> Python Virtual Environments
+# Ignore python virtual environment directories.
+venv/
+env/
+.venv/
+*.pyc
+*.pyo
+__pycache__/
+
+# ==> IDE & Editor Directories
+# Ignore configuration files from popular editors.
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ==> Operating System Files
+# Ignore metadata files from macOS, Windows, and Linux.
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==> General Temporary & Backup Files
+*~
+*.bak
+*.tmp
+
+# ==> Terraform state files (if you use Terraform alongside Ansible)
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars

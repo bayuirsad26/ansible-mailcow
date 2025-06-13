@@ -1,0 +1,62 @@
+# Mailcow Docker Compose override for Traefik integration
+# {{ ansible_managed }}
+
+version: '2.1'
+
+services:
+  nginx-mailcow:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network={{ traefik_network_name }}"
+      
+      # HTTP to HTTPS redirect
+      - "traefik.http.routers.mailcow-http.rule=Host(`{{ mailcow_hostname }}`)"
+      - "traefik.http.routers.mailcow-http.entrypoints=web"
+      - "traefik.http.routers.mailcow-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      
+      # HTTPS router
+      - "traefik.http.routers.mailcow-https.rule=Host(`{{ mailcow_hostname }}`)"
+      - "traefik.http.routers.mailcow-https.entrypoints=websecure"
+      - "traefik.http.routers.mailcow-https.tls=true"
+      - "traefik.http.routers.mailcow-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mailcow-https.service=mailcow"
+      
+      # Service configuration
+      - "traefik.http.services.mailcow.loadbalancer.server.port=8080"
+      
+      # Security headers
+      - "traefik.http.middlewares.mailcow-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.mailcow-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.mailcow-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.mailcow-headers.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.mailcow-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.mailcow-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.mailcow-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.mailcow-headers.headers.featurePolicy=camera 'none'; microphone 'none'; payment 'none'"
+      - "traefik.http.routers.mailcow-https.middlewares=mailcow-headers"
+    networks:
+      - mailcowdockerized_mailcow-network
+      - {{ traefik_network_name }}
+
+  postfix-mailcow:
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=9154"
+      - "prometheus.io/path=/metrics"
+
+  dovecot-mailcow:
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=9166"
+      - "prometheus.io/path=/metrics"
+
+  rspamd-mailcow:
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=11334"
+      - "prometheus.io/path=/metrics"
+
+networks:
+  {{ traefik_network_name }}:
+    external: true

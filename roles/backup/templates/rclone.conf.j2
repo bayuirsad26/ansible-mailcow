@@ -1,0 +1,30 @@
+# {{ ansible_managed }}
+# Rclone configuration for remote backups
+
+{% if vault_backup_provider == 's3' %}
+[backup-s3]
+type = s3
+provider = AWS
+access_key_id = {{ vault_aws_access_key }}
+secret_access_key = {{ vault_aws_secret_key }}
+region = {{ vault_aws_region }}
+acl = private
+server_side_encryption = AES256
+storage_class = STANDARD_IA
+{% elif vault_backup_provider == 'b2' %}
+[backup-b2]
+type = b2
+account = {{ vault_b2_account_id }}
+key = {{ vault_b2_application_key }}
+hard_delete = false
+{% elif vault_backup_provider == 'google' %}
+[backup-gcs]
+type = google cloud storage
+client_id = {{ vault_gcs_client_id }}
+client_secret = {{ vault_gcs_client_secret }}
+project_number = {{ vault_gcs_project_number }}
+object_acl = private
+bucket_acl = private
+location = {{ vault_gcs_location }}
+storage_class = NEARLINE
+{% endif %}

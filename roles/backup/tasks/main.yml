@@ -1,0 +1,76 @@
+---
+# Automated backup implementation
+# Ensures data protection and recovery capabilities
+
+- name: Install backup tools
+  ansible.builtin.apt:
+    name:
+      - rsync
+      - rclone
+      - borgbackup
+    state: present
+  tags: [backup, packages]
+
+- name: Create backup scripts directory
+  ansible.builtin.file:
+    path: /opt/backup-scripts
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  tags: [backup, directories]
+
+- name: Create Mailcow backup script
+  ansible.builtin.template:
+    src: mailcow-backup.sh.j2
+    dest: /opt/backup-scripts/mailcow-backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+  tags: [backup, scripts]
+
+- name: Create backup rotation script
+  ansible.builtin.template:
+    src: backup-rotate.sh.j2
+    dest: /opt/backup-scripts/backup-rotate.sh
+    owner: root
+    group: root
+    mode: "0750"
+  tags: [backup, scripts]
+
+- name: Configure rclone for remote backup
+  ansible.builtin.template:
+    src: rclone.conf.j2
+    dest: /root/.config/rclone/rclone.conf
+    owner: root
+    group: root
+    mode: "0600"
+  when: backup_destinations | selectattr('type', 'equalto', 'remote') | list | length > 0
+  tags: [backup, rclone]
+
+- name: Configure backup cron jobs
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    minute: "{{ item.minute }}"
+    hour: "{{ item.hour }}"
+    job: "{{ item.job }}"
+    user: root
+  loop:
+    - name: "Mailcow daily backup"
+      minute: "0"
+      hour: "3"
+      job: "/opt/backup-scripts/mailcow-backup.sh > /var/log/mailcow-backup.log 2>&1"
+    - name: "Backup rotation"
+      minute: "0"
+      hour: "4"
+      job: "/opt/backup-scripts/backup-rotate.sh > /var/log/backup-rotation.log 2>&1"
+  tags: [backup, cron]
+
+- name: Create backup monitoring script
+  ansible.builtin.template:
+    src: backup-monitor.sh.j2
+    dest: /opt/backup-scripts/backup-monitor.sh
+    owner: root
+    group: root
+    mode: "0750"
+  tags: [backup, monitoring]

@@ -1,0 +1,90 @@
+---
+# Health check tasks for post-deployment validation
+
+- name: System health checks
+  block:
+    - name: Check system resources
+      shell: |
+        echo "CPU Usage: $(top -bn1 | grep load | awk '{printf "%.2f%%\n", $(NF-2)}')"
+        echo "Memory Usage: $(free -m | awk 'NR==2{printf "%.2f%%\n", $3*100/$2}')"
+        echo "Disk Usage: $(df -h / | awk 'NR==2{printf "%s\n", $5}')"
+      register: system_resources
+      
+    - name: Display system resources
+      debug:
+        var: system_resources.stdout_lines
+
+- name: Docker health checks
+  block:
+    - name: Check Docker service
+      systemd:
+        name: docker
+        state: started
+      check_mode: yes
+      register: docker_status
+      
+    - name: List running containers
+      docker_container_info:
+      register: docker_containers
+      
+    - name: Check critical containers
+      assert:
+        that:
+          - docker_containers.containers | selectattr('State.Status', 'equalto', 'running') | selectattr('Name', 'match', '.*traefik.*') | list | length > 0
+          - docker_containers.containers | selectattr('State.Status', 'equalto', 'running') | selectattr('Name', 'match', '.*dovecot.*') | list | length > 0
+          - docker_containers.containers | selectattr('State.Status', 'equalto', 'running') | selectattr('Name', 'match', '.*postfix.*') | list | length > 0
+        fail_msg: "Critical containers are not running"
+
+- name: Service connectivity checks
+  block:
+    - name: Check HTTPS connectivity
+      uri:
+        url: "https://{{ mailcow_hostname }}"
+        validate_certs: yes
+        status_code: 200
+        timeout: 10
+      register: https_check
+      
+    - name: Check mail services
+      wait_for:
+        port: "{{ item.port }}"
+        host: "{{ ansible_default_ipv4.address }}"
+        timeout: 10
+      loop:
+        - { port: 25, name: "SMTP" }
+        - { port: 465, name: "SMTPS" }
+        - { port: 587, name: "Submission" }
+        - { port: 993, name: "IMAPS" }
+
+- name: Monitoring stack checks
+  block:
+    - name: Check Prometheus metrics
+      uri:
+        url: "http://localhost:9090/api/v1/query?query=up"
+        method: GET
+      register: prometheus_check
+      
+    - name: Verify monitoring targets
+      assert:
+        that:
+          - prometheus_check.json.data.result | length > 5
+        fail_msg: "Not enough monitoring targets are up"
+
+- name: Generate health report
+  set_fact:
+    health_report:
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ inventory_hostname }}"
+      services:
+        docker: "{{ 'healthy' if docker_status.changed == false else 'unhealthy' }}"
+        https: "{{ 'healthy' if https_check.status == 200 else 'unhealthy' }}"
+        mail_services: "healthy"
+        monitoring: "{{ 'healthy' if prometheus_check.json.data.result | length > 5 else 'unhealthy' }}"
+      system:
+        cpu: "{{ system_resources.stdout_lines[0] }}"
+        memory: "{{ system_resources.stdout_lines[1] }}"
+        disk: "{{ system_resources.stdout_lines[2] }}"
+
+- name: Display health report
+  debug:
+    var: health_report

@@ -1,0 +1,89 @@
+---
+# Common tasks for all servers
+# Implements baseline security and configuration
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [common, packages]
+
+- name: Install essential packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - python3-pip
+      - python3-setuptools
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - htop
+      - vim
+      - git
+      - rsync
+      - net-tools
+      - dnsutils
+    state: present
+  tags: [common, packages]
+
+- name: Configure system timezone
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+  tags: [common, timezone]
+
+- name: Configure system locale
+  community.general.locale_gen:
+    name: "{{ system_locale }}"
+    state: present
+  tags: [common, locale]
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  tags: [common, hostname]
+
+- name: Update /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ ansible_default_ipv4.address }} {{ inventory_hostname }} {{ inventory_hostname_short }}"
+    state: present
+  tags: [common, hostname]
+
+- name: Configure sysctl for security and performance
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { key: "net.ipv4.tcp_syncookies", value: "1" }
+    - { key: "net.ipv4.conf.all.rp_filter", value: "1" }
+    - { key: "net.ipv4.conf.default.rp_filter", value: "1" }
+    - { key: "net.ipv4.conf.all.accept_source_route", value: "0" }
+    - { key: "net.ipv6.conf.all.accept_source_route", value: "0" }
+    - { key: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { key: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { key: "net.ipv6.conf.all.accept_redirects", value: "0" }
+    - { key: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    - { key: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
+    - { key: "fs.file-max", value: "65535" }
+    - { key: "vm.swappiness", value: "10" }
+  tags: [common, sysctl, security]
+
+- name: Create backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - /backup
+    - /backup/mailcow
+    - /backup/config
+  tags: [common, backup]

@@ -1,0 +1,40 @@
+# This is an example vault file - encrypt with ansible-vault
+---
+# Production host configuration
+vault_production_host_ip: "YOUR_VPS_IP"
+vault_production_user: "deploy"
+vault_production_ssh_key: "~/.ssh/id_rsa_production"
+
+# Traefik authentication (htpasswd format)
+vault_traefik_dashboard_auth: "admin:$2y$10$..."
+
+# Mailcow configuration
+vault_mailcow_api_key: "YOUR_SECURE_API_KEY"
+vault_mailcow_api_key_readonly: "YOUR_READONLY_API_KEY"
+vault_watchdog_email: "monitoring@summitethic.com"
+
+# Monitoring passwords
+vault_grafana_admin_password: "SECURE_GRAFANA_PASSWORD"
+vault_grafana_secret_key: "RANDOM_SECRET_KEY"
+
+# Alert emails
+vault_alert_email_default: "alerts@summitethic.com"
+vault_alert_email_critical: "oncall@summitethic.com"
+vault_alert_email_warning: "devops@summitethic.com"
+
+# Backup configuration
+vault_backup_provider: "s3"  # or "b2", "google"
+vault_backup_bucket: "summitethic-mailcow-backups"
+vault_backup_notification_email: "backup-reports@summitethic.com"
+
+# AWS S3 credentials (if using S3)
+vault_aws_access_key: "YOUR_AWS_ACCESS_KEY"
+vault_aws_secret_key: "YOUR_AWS_SECRET_KEY"
+vault_aws_region: "ap-southeast-1"
+
+# Cloudflare configuration
+vault_cloudflare_api_token: "YOUR_CLOUDFLARE_API_TOKEN"
+vault_cloudflare_zone_id: "YOUR_ZONE_ID"
+
+# Security notifications
+vault_security_notification_email: "security@summitethic.com"

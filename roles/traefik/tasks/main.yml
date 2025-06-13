@@ -1,0 +1,71 @@
+---
+# Traefik reverse proxy setup with security focus
+# Implements automatic HTTPS and certificate management
+
+- name: Create Traefik directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /opt/traefik
+    - /opt/traefik/config
+    - /opt/traefik/certificates
+    - /opt/traefik/logs
+  tags: [traefik, directories]
+
+- name: Create Traefik configuration
+  template:
+    src: traefik.yml.j2
+    dest: /opt/traefik/traefik.yml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart traefik
+  tags: [traefik, config]
+
+- name: Create Traefik dynamic configuration
+  template:
+    src: dynamic.yml.j2
+    dest: /opt/traefik/config/dynamic.yml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart traefik
+  tags: [traefik, config]
+
+- name: Create Traefik docker-compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/traefik/docker-compose.yml
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [traefik, compose]
+
+- name: Create acme.json file with correct permissions
+  file:
+    path: /opt/traefik/certificates/acme.json
+    state: touch
+    owner: root
+    group: root
+    mode: '0600'
+  tags: [traefik, certificates]
+
+- name: Start Traefik service
+  docker_compose:
+    project_src: /opt/traefik
+    state: present
+  tags: [traefik, service]
+
+- name: Wait for Traefik to be healthy
+  uri:
+    url: "http://localhost:8080/ping"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 5
+  tags: [traefik, health]
