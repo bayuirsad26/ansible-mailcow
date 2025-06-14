@@ -100,17 +100,17 @@
         subject: "[{{ environment | upper }}] Deployment completed - {{ inventory_hostname }}"
         body: |
           Deployment completed successfully!
-          
+
           Server: {{ inventory_hostname }}
           Environment: {{ environment }}
           Time: {{ ansible_date_time.iso8601 }}
-          
+
           Services deployed:
           - Mailcow: {{ mailcow_version }}
           - Traefik: {{ traefik_version }}
           - Monitoring: {{ 'Enabled' if monitoring_enabled | default(true) else 'Disabled' }}
           - Backup: {{ 'Enabled' if backup_enabled | default(true) else 'Disabled' }}
-          
+
           Please check the deployment report for details.
       when: vault_notification_email is defined
       tags: [notification]
@@ -118,9 +118,9 @@
   handlers:
     - name: Include common handlers
       ansible.builtin.include_tasks: ../roles/common/handlers/main.yml
-      
+
     - name: Include security handlers
       ansible.builtin.include_tasks: ../roles/security/handlers/main.yml
-      
+
     - name: Include docker handlers
       ansible.builtin.include_tasks: ../roles/docker/handlers/main.yml

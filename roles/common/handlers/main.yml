@@ -1,6 +1,7 @@
 ---
 - name: Reload sysctl
   ansible.builtin.command: sysctl -p /etc/sysctl.d/99-summitethic.conf
+  changed_when: false
 
 - name: Restart ssh
   ansible.builtin.systemd:

@@ -126,6 +126,7 @@
   tags: [docker, security]
 
 - name: Configure user namespace remapping
+  tags: [docker, security]
   when: docker_userns_remap != ""
   block:
     - name: Create subuid entry
@@ -145,7 +146,6 @@
         owner: root
         group: root
         mode: '0644'
-  tags: [docker, security]
 
 - name: Start and enable Docker service
   ansible.builtin.systemd:

@@ -146,6 +146,7 @@
   tags: [common, logging]
 
 - name: Set up swap file if not exists
+  tags: [common, swap]
   block:
     - name: Check if swap file exists
       ansible.builtin.stat:
@@ -156,6 +157,7 @@
       ansible.builtin.command: |
         dd if=/dev/zero of=/swapfile bs=1M count=2048
       when: not swap_file_check.stat.exists
+      changed_when: true
 
     - name: Set swap file permissions
       ansible.builtin.file:
@@ -168,10 +170,12 @@
     - name: Make swap file
       ansible.builtin.command: mkswap /swapfile
       when: not swap_file_check.stat.exists
+      changed_when: true
 
     - name: Enable swap file
       ansible.builtin.command: swapon /swapfile
       when: not swap_file_check.stat.exists
+      changed_when: true
 
     - name: Add swap file to fstab
       ansible.posix.mount:
@@ -180,4 +184,3 @@
         fstype: swap
         opts: sw
         state: present
-  tags: [common, swap]

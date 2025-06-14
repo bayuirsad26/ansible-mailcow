@@ -41,10 +41,10 @@
         subject: "[{{ environment | upper }}] Manual backup completed"
         body: |
           Manual backup completed
-          
+
           Server: {{ inventory_hostname }}
           Time: {{ ansible_date_time.iso8601 }}
           Status: {{ 'Success' if backup_result.rc == 0 else 'Failed' }}
-          
+
           {{ backup_result.stdout }}
       when: vault_backup_notification_email is defined

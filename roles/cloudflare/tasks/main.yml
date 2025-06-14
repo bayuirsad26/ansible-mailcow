@@ -58,7 +58,7 @@
     method: GET
     headers:
       X-API-Key: "{{ mailcow_config.API_KEY }}"
-    validate_certs: yes
+    validate_certs: true
   register: dkim_key
   retries: 5
   delay: 30

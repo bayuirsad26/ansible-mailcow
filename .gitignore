@@ -3,6 +3,7 @@
 # ==> Ansible Vault
 # Ignore the vault password file. NEVER commit this.
 vault.password
+.vault_pass
 *.vault
 
 # ==> Ansible Temporary Files

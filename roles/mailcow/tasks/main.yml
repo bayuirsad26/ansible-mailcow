@@ -52,12 +52,16 @@
   ansible.builtin.shell: |
     cd {{ mailcow_install_path }}
     docker compose pull
+  register: pull_result
+  changed_when: "'Downloaded' in pull_result.stdout or 'Pulling' in pull_result.stdout"
   tags: [mailcow, docker]
 
 - name: Start Mailcow services
   ansible.builtin.shell: |
     cd {{ mailcow_install_path }}
     docker compose up -d
+  register: start_result
+  changed_when: "'Creating' in start_result.stdout or 'Started' in start_result.stdout"
   tags: [mailcow, service]
 
 - name: Wait for Mailcow to be healthy

@@ -9,7 +9,7 @@
         echo "Memory Usage: $(free -m | awk 'NR==2{printf "%.2f%%\n", $3*100/$2}')"
         echo "Disk Usage: $(df -h / | awk 'NR==2{printf "%s\n", $5}')"
       register: system_resources
-      
+
     - name: Display system resources
       debug:
         var: system_resources.stdout_lines
@@ -20,13 +20,13 @@
       systemd:
         name: docker
         state: started
-      check_mode: yes
+      check_mode: true
       register: docker_status
-      
+
     - name: List running containers
       docker_container_info:
       register: docker_containers
-      
+
     - name: Check critical containers
       assert:
         that:
@@ -40,11 +40,11 @@
     - name: Check HTTPS connectivity
       uri:
         url: "https://{{ mailcow_hostname }}"
-        validate_certs: yes
+        validate_certs: true
         status_code: 200
         timeout: 10
       register: https_check
-      
+
     - name: Check mail services
       wait_for:
         port: "{{ item.port }}"
@@ -63,7 +63,7 @@
         url: "http://localhost:9090/api/v1/query?query=up"
         method: GET
       register: prometheus_check
-      
+
     - name: Verify monitoring targets
       assert:
         that:

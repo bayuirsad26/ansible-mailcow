@@ -200,6 +200,7 @@
   tags: [security, passwords]
 
 - name: Configure audit logging
+  tags: [security, audit]
   when: security_audit_enabled | bool
   block:
     - name: Install auditd
@@ -230,7 +231,6 @@
         name: auditd
         enabled: true
         state: started
-  tags: [security, audit]
 
 - name: Secure shared memory
   ansible.posix.mount:

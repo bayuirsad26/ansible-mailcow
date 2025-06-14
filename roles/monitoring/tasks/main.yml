@@ -81,7 +81,7 @@
   tags: [monitoring, compose]
 
 - name: Start monitoring stack
-  docker_compose:
+  community.docker.docker_compose_v2:
     project_src: /opt/monitoring
     state: present
   tags: [monitoring, service]
