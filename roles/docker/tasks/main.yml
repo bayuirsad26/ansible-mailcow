@@ -136,7 +136,7 @@
         owner: root
         group: root
         mode: '0644'
-        
+
     - name: Create subgid entry
       ansible.builtin.lineinfile:
         path: /etc/subgid

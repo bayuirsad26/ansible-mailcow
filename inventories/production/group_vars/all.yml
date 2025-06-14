@@ -111,7 +111,7 @@ monitoring_prometheus_config:
     evaluation_interval: 15s
     external_labels:
       cluster: 'summitethic-production'
-      
+
 monitoring_grafana_config:
   server:
     domain: "grafana.{{ mailcow_hostname }}"
@@ -123,7 +123,7 @@ monitoring_grafana_config:
     enabled: true
     host: "localhost:587"
     from_address: "monitoring@{{ mailcow_hostname }}"
-    
+
 monitoring_loki_config:
   auth_enabled: false
   server:
@@ -155,7 +155,7 @@ backup_destinations:
   - type: remote
     provider: "{{ vault_backup_provider }}"
     bucket: "{{ vault_backup_bucket }}"
-    
+
 # Cloudflare Configuration
 cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
 cloudflare_zone_id: "{{ vault_cloudflare_zone_id }}"

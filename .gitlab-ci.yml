@@ -311,7 +311,7 @@ deploy-production:
       # Create deployment record
       DEPLOYMENT_ID=$(date +%Y%m%d%H%M%S)
       echo "Deployment ID: $DEPLOYMENT_ID"
-      
+
       # Run deployment
       ansible-playbook -i inventories/production/hosts.yml \
         playbooks/site.yml \
@@ -347,22 +347,22 @@ generate-compliance-report:
       # Generate compliance report
       cat > compliance-report.md <<EOF
       # Compliance Report
-      
+
       **Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
       **Environment**: Production
-      
+
       ## GDPR Compliance
       - [x] End-to-end encryption implemented
       - [x] Data retention policies configured
       - [x] Right to erasure capabilities
       - [x] Audit logging enabled
-      
+
       ## Security Standards
       - [x] NIST SP 800-53 controls implemented
       - [x] CIS benchmarks applied
       - [x] Regular security updates enabled
       - [x] Intrusion detection active
-      
+
       ## Ethical Guidelines
       - [x] Transparent logging
       - [x] Minimal data collection

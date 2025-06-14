@@ -206,7 +206,7 @@
       ansible.builtin.package:
         name: auditd
         state: present
-        
+
     - name: Configure audit rules
       ansible.builtin.template:
         src: audit.rules.j2
@@ -215,7 +215,7 @@
         group: root
         mode: '0640'
       notify: restart auditd
-      
+
     - name: Configure auditd
       ansible.builtin.template:
         src: auditd.conf.j2
@@ -224,7 +224,7 @@
         group: root
         mode: '0640'
       notify: restart auditd
-      
+
     - name: Ensure auditd is started and enabled
       ansible.builtin.systemd:
         name: auditd
